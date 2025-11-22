@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Full Stack Quiz Platform
 
-## Getting Started
+A production-ready test platform built with Next.js, MongoDB, Redis, and BullMQ.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **Admin Dashboard**: Create tests, upload DOCX/PDF, manage batches.
+- **File Parsing**: Automatically extracts questions from uploaded documents.
+- **Test Engine**: Server-authoritative timer, autosave, secure test taking.
+- **Auto-Grading**: Instant results for objective questions.
+- **AI Explanations**: Google Gemini integration for personalized feedback.
+- **Manual Grading**: Queue for subjective questions (UI placeholder).
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Prerequisites
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Node.js 18+
+- Docker (for MongoDB & Redis)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Setup
 
-## Learn More
+1.  **Install Dependencies**:
+    ```bash
+    npm install
+    ```
 
-To learn more about Next.js, take a look at the following resources:
+2.  **Start Infrastructure**:
+    ```bash
+    docker-compose up -d
+    ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+3.  **Configure Environment**:
+    Create `.env.local`:
+    ```env
+    MONGODB_URI=mongodb://localhost:27017/quizzapp
+    REDIS_URL=redis://localhost:6379
+    NEXTAUTH_SECRET=your-secret-key
+    NEXTAUTH_URL=http://localhost:3000
+    GOOGLE_API_KEY=your-gemini-api-key
+    ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+4.  **Run Development Server**:
+    ```bash
+    npm run dev
+    ```
 
-## Deploy on Vercel
+5.  **Run Worker (in separate terminal)**:
+    *Note: In a real production setup, this would be a separate process.*
+    For local dev, you can create a script to run the worker or just rely on the API triggering it (current implementation is synchronous for submit, async for expiry needs worker script).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Usage
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Access Admin UI at `/admin`.
+- Access User Dashboard at `/dashboard`.
+- Upload format: See `sample-upload.docx` (create one based on the spec).
+
+## Tech Stack
+
+- **Frontend**: Next.js 14 (App Router), TailwindCSS, Shadcn UI.
+- **Backend**: Next.js API Routes.
+- **Database**: MongoDB (Mongoose).
+- **Queue**: BullMQ + Redis.
+- **AI**: Google Gemini.
