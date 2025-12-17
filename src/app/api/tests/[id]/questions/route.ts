@@ -9,10 +9,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         const { id } = await params;
         const testId = id;
 
-        // Add testId to each question
+        // Validate and clean questions before insert
         const questionsWithTestId = questions.map((q: any) => ({
             ...q,
             testId,
+            // Ensure options only contains valid entries
+            options: q.options?.filter((opt: any) => opt.text?.trim()) || [],
         }));
 
         // Bulk insert questions
@@ -36,8 +38,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         });
 
         return NextResponse.json({ success: true, count: createdQuestions.length });
-    } catch (error) {
-        console.error(error);
-        return NextResponse.json({ error: 'Failed to save questions' }, { status: 500 });
+    } catch (error: any) {
+        console.error('Save questions error:', error);
+
+        // Return detailed validation errors
+        if (error.name === 'ValidationError') {
+            const messages = Object.values(error.errors).map((e: any) => e.message);
+            return NextResponse.json({
+                error: 'Validation failed',
+                details: messages
+            }, { status: 400 });
+        }
+
+        return NextResponse.json({
+            error: 'Failed to save questions',
+            details: error.message
+        }, { status: 500 });
     }
 }

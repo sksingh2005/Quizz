@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
 
@@ -99,6 +101,15 @@ export default function TestPlayerPage({ params }: { params: Promise<{ id: strin
     if (!data) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin" /></div>;
 
     const currentQ = data.questions[currentQIndex];
+    if (!currentQ) {
+        return (
+            <div className="flex justify-center items-center h-screen flex-col gap-4">
+                <AlertTriangle className="h-10 w-10 text-yellow-500" />
+                <p>Question not found or invalid data.</p>
+                <Button onClick={() => router.push('/dashboard')}>Return to Dashboard</Button>
+            </div>
+        );
+    }
 
     return (
         <div className="flex h-screen flex-col">
@@ -120,7 +131,9 @@ export default function TestPlayerPage({ params }: { params: Promise<{ id: strin
                     <h3 className="font-semibold mb-4">Questions</h3>
                     <div className="grid grid-cols-4 gap-2">
                         {data.questions.map((q: any, i: number) => {
-                            const isAnswered = answers[q._id] !== undefined && answers[q._id] !== null && answers[q._id] !== '';
+                            const answer = answers[q._id];
+                            const isAnswered = answer !== undefined && answer !== null && answer !== '' &&
+                                !(Array.isArray(answer) && answer.length === 0);
                             const isCurrent = currentQIndex === i;
 
                             return (
@@ -177,7 +190,121 @@ export default function TestPlayerPage({ params }: { params: Promise<{ id: strin
                                     </>
                                 )}
 
-                                {/* Add other question types here */}
+                                {currentQ.type === 'multi-mcq' && (
+                                    <>
+                                        <div className="space-y-2">
+                                            {currentQ.options.map((opt: any) => {
+                                                const selectedAnswers = answers[currentQ._id] || [];
+                                                const isChecked = Array.isArray(selectedAnswers) && selectedAnswers.includes(opt.id);
+
+                                                return (
+                                                    <div
+                                                        key={opt.id}
+                                                        className="flex items-center space-x-3 border p-3 rounded-md hover:bg-accent cursor-pointer"
+                                                        onClick={() => {
+                                                            const current = answers[currentQ._id] || [];
+                                                            const currentArray = Array.isArray(current) ? current : [];
+                                                            let newAnswers;
+                                                            if (currentArray.includes(opt.id)) {
+                                                                newAnswers = currentArray.filter((id: string) => id !== opt.id);
+                                                            } else {
+                                                                newAnswers = [...currentArray, opt.id].sort();
+                                                            }
+                                                            handleAnswerChange(currentQ._id, newAnswers.length > 0 ? newAnswers : null);
+                                                        }}
+                                                    >
+                                                        <Checkbox
+                                                            checked={isChecked}
+                                                            id={`multi-${currentQ._id}-${opt.id}`}
+                                                        />
+                                                        <Label htmlFor={`multi-${currentQ._id}-${opt.id}`} className="flex-1 cursor-pointer">
+                                                            {opt.text}
+                                                        </Label>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        <p className="text-sm text-muted-foreground mt-2">
+                                            Select all correct answers
+                                        </p>
+
+                                        {answers[currentQ._id] && Array.isArray(answers[currentQ._id]) && answers[currentQ._id].length > 0 && (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handleClearAnswer(currentQ._id)}
+                                                className="mt-2"
+                                            >
+                                                Clear Answer
+                                            </Button>
+                                        )}
+                                    </>
+                                )}
+
+                                {currentQ.type === 'integer' && (
+                                    <>
+                                        <div className="space-y-2">
+                                            <Label htmlFor={`integer-${currentQ._id}`}>Enter your answer (numeric)</Label>
+                                            <Input
+                                                id={`integer-${currentQ._id}`}
+                                                type="number"
+                                                placeholder="Enter a number..."
+                                                value={answers[currentQ._id] !== undefined && answers[currentQ._id] !== null ? answers[currentQ._id] : ''}
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+                                                    if (value === '') {
+                                                        handleAnswerChange(currentQ._id, null);
+                                                    } else {
+                                                        // Store as number for proper comparison during grading
+                                                        handleAnswerChange(currentQ._id, Number(value));
+                                                    }
+                                                }}
+                                                className="max-w-xs"
+                                            />
+                                        </div>
+
+                                        {answers[currentQ._id] !== undefined && answers[currentQ._id] !== null && answers[currentQ._id] !== '' && (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handleClearAnswer(currentQ._id)}
+                                                className="mt-2"
+                                            >
+                                                Clear Answer
+                                            </Button>
+                                        )}
+                                    </>
+                                )}
+
+                                {currentQ.type === 'short' && (
+                                    <>
+                                        <div className="space-y-2">
+                                            <Label htmlFor={`short-${currentQ._id}`}>Enter your answer</Label>
+                                            <Input
+                                                id={`short-${currentQ._id}`}
+                                                type="text"
+                                                placeholder="Type your answer..."
+                                                value={answers[currentQ._id] || ''}
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+                                                    handleAnswerChange(currentQ._id, value || null);
+                                                }}
+                                                className="max-w-md"
+                                            />
+                                        </div>
+
+                                        {answers[currentQ._id] && (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handleClearAnswer(currentQ._id)}
+                                                className="mt-2"
+                                            >
+                                                Clear Answer
+                                            </Button>
+                                        )}
+                                    </>
+                                )}
                             </CardContent>
                         </Card>
 
