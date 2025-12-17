@@ -8,7 +8,9 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Loader2, Clock, CheckCircle, AlertTriangle, Shield } from 'lucide-react';
+import { useAntiCheat } from '@/hooks/useAntiCheat';
+import { WarningModal } from '@/components/ui/warning-modal';
 
 export default function TestPlayerPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
@@ -18,6 +20,50 @@ export default function TestPlayerPage({ params }: { params: Promise<{ id: strin
     const [answers, setAnswers] = useState<Record<string, any>>({});
     const [timeLeft, setTimeLeft] = useState<number | null>(null);
     const [saving, setSaving] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleSubmit = useCallback(async () => {
+        if (isSubmitting) return;
+        setIsSubmitting(true);
+
+        // Exit fullscreen before navigating
+        if (document.fullscreenElement) {
+            try {
+                await document.exitFullscreen();
+            } catch (e) {
+                // Ignore errors
+            }
+        }
+
+        await fetch(`/api/attempts/${id}/submit`, { method: 'POST' });
+        router.push(`/test/${id}/result`);
+    }, [id, router, isSubmitting]);
+
+    // Anti-cheat hook
+    const {
+        isFullscreen,
+        enterFullscreen,
+        violationCount,
+        maxViolations,
+        showWarning,
+        lastViolationType,
+        dismissWarning
+    } = useAntiCheat({
+        attemptId: id,
+        onAutoSubmit: handleSubmit,
+        enabled: !!data && !isSubmitting
+    });
+
+    // Enter fullscreen on mount
+    useEffect(() => {
+        if (data && !isSubmitting) {
+            // Small delay to ensure the page is fully loaded
+            const timer = setTimeout(() => {
+                enterFullscreen();
+            }, 500);
+            return () => clearTimeout(timer);
+        }
+    }, [data, enterFullscreen, isSubmitting]);
 
     useEffect(() => {
         fetch(`/api/attempts/${id}/play`)
@@ -93,11 +139,6 @@ export default function TestPlayerPage({ params }: { params: Promise<{ id: strin
         saveAnswer(questionId, null);
     };
 
-    const handleSubmit = async () => {
-        await fetch(`/api/attempts/${id}/submit`, { method: 'POST' });
-        router.push(`/test/${id}/result`);
-    };
-
     if (!data) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin" /></div>;
 
     const currentQ = data.questions[currentQIndex];
@@ -113,15 +154,38 @@ export default function TestPlayerPage({ params }: { params: Promise<{ id: strin
 
     return (
         <div className="flex h-screen flex-col">
+            {/* Warning Modal */}
+            <WarningModal
+                isOpen={showWarning}
+                violationType={lastViolationType}
+                violationCount={violationCount}
+                maxViolations={maxViolations}
+                onDismiss={dismissWarning}
+            />
+
             {/* Header */}
             <header className="border-b p-4 flex justify-between items-center bg-background">
-                <h1 className="font-bold text-lg">{data.test.title}</h1>
+                <div className="flex items-center gap-4">
+                    <h1 className="font-bold text-lg">{data.test.title}</h1>
+                    {/* Violation indicator */}
+                    {violationCount > 0 && (
+                        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${violationCount >= maxViolations - 1
+                                ? 'bg-red-500/20 text-red-500'
+                                : 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400'
+                            }`}>
+                            <Shield className="h-3 w-3" />
+                            {violationCount}/{maxViolations} warnings
+                        </div>
+                    )}
+                </div>
                 <div className="flex items-center gap-4">
                     <div className={`flex items-center gap-2 font-mono text-xl ${timeLeft && timeLeft < 300 ? 'text-red-500' : ''}`}>
                         <Clock className="h-5 w-5" />
                         {timeLeft ? `${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}` : '--:--'}
                     </div>
-                    <Button variant="destructive" onClick={handleSubmit}>Submit Test</Button>
+                    <Button variant="destructive" onClick={handleSubmit} disabled={isSubmitting}>
+                        {isSubmitting ? 'Submitting...' : 'Submit Test'}
+                    </Button>
                 </div>
             </header>
 
