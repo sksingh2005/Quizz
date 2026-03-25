@@ -18,7 +18,7 @@ export interface ParsedQuestion {
     type: string;
     stem: string;
     options: { id: string; text: string }[];
-    correctAnswer: string;
+    correctAnswer: string | string[] | number;
     marks: number;
     negativeMarks: number;
     explanation: string;
@@ -81,22 +81,20 @@ function repairTruncatedJson(jsonString: string): string {
     const trimmed = jsonString.trim();
     if (!trimmed.startsWith('[')) return '[]';
 
+    // Walk backwards to find the last complete '}'
     let current = trimmed;
     while (current.length > 2 && current[current.length - 1] !== '}') {
         current = current.substring(0, current.length - 1);
     }
 
-    const lastCommaBrace = current.lastIndexOf('},');
-    if (lastCommaBrace !== -1) {
-        const safeParams = current.substring(0, current.lastIndexOf('}') + 1);
-        return safeParams + ']';
-    }
+    if (!current.endsWith('}')) return '[]';
 
-    if (current.endsWith('}')) {
-        return current + ']';
-    }
+    // Check if there's a trailing partial object after the last clean '}'
+    // by looking for ',' followed by another '{' after the last '}'
+    const lastBrace = current.lastIndexOf('}');
+    const safeJson = current.substring(0, lastBrace + 1);
 
-    return '[]';
+    return safeJson + ']';
 }
 
 function buildSchema(): Schema {
@@ -133,7 +131,7 @@ export async function extractPdfQuestions(input: ExtractPdfQuestionsInput): Prom
     const model = genAI.getGenerativeModel({
         model: 'gemini-2.5-flash',
         generationConfig: {
-            maxOutputTokens: 8192,
+            maxOutputTokens: 65536,
             responseMimeType: 'application/json',
             responseSchema: buildSchema(),
         }
@@ -188,12 +186,30 @@ export async function extractPdfQuestions(input: ExtractPdfQuestionsInput): Prom
             }))
             : [];
 
+        const validType = ['mcq', 'multi-mcq', 'integer', 'short'].includes(rawType) ? rawType : 'mcq';
+        const rawAnswer = String(q.correctAnswer ?? '').trim();
+
+        // Normalise correctAnswer to the right shape for each type
+        let correctAnswer: string | string[] | number = rawAnswer;
+        if (validType === 'multi-mcq') {
+            // AI may return "A, C" or "a,c" — convert to sorted lowercase array
+            correctAnswer = rawAnswer
+                .split(',')
+                .map(a => a.replace(/[()]/g, '').trim().toLowerCase())
+                .filter(Boolean);
+        } else if (validType === 'integer') {
+            const num = parseFloat(rawAnswer);
+            correctAnswer = isNaN(num) ? rawAnswer : num;
+        } else {
+            correctAnswer = rawAnswer.toLowerCase();
+        }
+
         return {
             section: String(q.section || (input.sourceType === 'book' ? 'Book Exercises' : 'General')),
-            type: ['mcq', 'multi-mcq', 'integer', 'short'].includes(rawType) ? rawType : 'mcq',
+            type: validType,
             stem: String(q.stem || ''),
             options,
-            correctAnswer: String(q.correctAnswer ?? '').trim(),
+            correctAnswer,
             marks: typeof q.marks === 'number' ? q.marks : 1,
             negativeMarks: typeof q.negativeMarks === 'number' ? q.negativeMarks : 0,
             explanation: String(q.explanation || '')
