@@ -142,26 +142,39 @@ function parseMarkdownFormat(text: string): ParseResult {
                     continue;
                 }
 
-                // Detect **Correct Answer:** (D) 0.225 or **Correct Answer:** D
-                const answerMatch = line.match(/^\*\*Correct Answer:\*\*\s*\(?([A-Za-z])\)?\s*(.*)/i);
+                // Detect **Correct Answer:** (D) or **Correct Answer:** A, C or **Correct Answer:** 42
+                const answerMatch = line.match(/^\*\*Correct Answer:\*\*\s*(.*)/i);
                 if (answerMatch) {
                     mode = 'none';
-                    const ansLetter = answerMatch[1].toLowerCase();
-                    // Determine if multi-select based on commas
-                    if (ansLetter.includes(',')) {
+                    const ansRaw = answerMatch[1].trim();
+                    // Strip surrounding parens from single answers like "(D)"
+                    const stripped = ansRaw.replace(/^\((.+)\)$/, '$1').trim();
+                    if (stripped.includes(',')) {
+                        // Multi-select: "A, C" or "(A), (C)"
                         q.type = 'multi-mcq';
-                        q.correctAnswer = ansLetter.split(',').map(a => a.trim().toLowerCase());
+                        q.correctAnswer = stripped.split(',').map(a => a.replace(/[()]/g, '').trim().toLowerCase()).filter(Boolean);
+                    } else if (/^-?\d+(\.\d+)?$/.test(stripped)) {
+                        // Numeric answer
+                        q.type = 'integer';
+                        q.correctAnswer = parseFloat(stripped);
                     } else {
-                        q.correctAnswer = ansLetter;
+                        q.correctAnswer = stripped.toLowerCase();
                     }
                     continue;
                 }
 
-                // Also support "Answer: D" plain format within markdown blocks
-                const plainAnswerMatch = line.match(/^Answer:\s*\(?([A-Za-z])\)?\s*/i);
+                // Also support "Answer: D" or "Answer: A, C" plain format within markdown blocks
+                const plainAnswerMatch = line.match(/^Answer:\s*(.*)/i);
                 if (plainAnswerMatch) {
                     mode = 'none';
-                    q.correctAnswer = plainAnswerMatch[1].toLowerCase();
+                    const ansRaw = plainAnswerMatch[1].trim();
+                    const stripped = ansRaw.replace(/^\((.+)\)$/, '$1').trim();
+                    if (stripped.includes(',')) {
+                        q.type = 'multi-mcq';
+                        q.correctAnswer = stripped.split(',').map(a => a.replace(/[()]/g, '').trim().toLowerCase()).filter(Boolean);
+                    } else {
+                        q.correctAnswer = stripped.toLowerCase();
+                    }
                     continue;
                 }
 
@@ -188,12 +201,12 @@ function parseMarkdownFormat(text: string): ParseResult {
                 q.explanation = explanationLines.join('\n');
             }
 
-            // Determine type from options count
+            // Determine type from options and answer shape
             if (q.options && q.options.length > 0) {
                 q.type = Array.isArray(q.correctAnswer) ? 'multi-mcq' : 'mcq';
-            } else if (q.correctAnswer && !isNaN(Number(q.correctAnswer))) {
+            } else if (q.type === 'integer' || (typeof q.correctAnswer === 'number' && !isNaN(q.correctAnswer))) {
                 q.type = 'integer';
-            } else if (q.options?.length === 0) {
+            } else {
                 q.type = 'short';
             }
 
@@ -218,21 +231,28 @@ function parseMarkdownFormat(text: string): ParseResult {
  * Explanation: text
  */
 function parseLegacyFormat(text: string): ParseResult {
-    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l);
+    // Preserve blank lines so we can detect multi-line stems; trim each line only
+    const lines = text.split(/\r?\n/).map(l => l.trim());
     const questions: ParsedQuestion[] = [];
     const errors: string[] = [];
 
     let currentSection = 'General';
     let currentQuestion: Partial<ParsedQuestion> | null = null;
+    let stemContinuation = false; // true while still accumulating a multi-line stem
 
     const sectionRegex = /^={3,}\s*SECTION:\s*(.+?)\s*={3,}$/i;
     const questionStartRegex = /^Q(\d+)\.\s*(\((.+?)\))?\s*(.+?)(\[marks=(\d+)\])?$/i;
-    const optionRegex = /^([A-Z])[\.\\)]\s*(.+)$/;
+    const optionRegex = /^([A-Za-z])[.)]\s*(.+)$/;
     const answerRegex = /^Answer:\s*(.+)$/i;
     const explanationRegex = /^Explanation:\s*(.+)$/i;
     const imageRegex = /^Image:\s*(.+)$/i;
 
     for (const line of lines) {
+        // Empty line ends stem continuation
+        if (!line) {
+            stemContinuation = false;
+            continue;
+        }
         const sectionMatch = line.match(sectionRegex);
         if (sectionMatch) {
             currentSection = sectionMatch[1].trim();
@@ -255,7 +275,8 @@ function parseLegacyFormat(text: string): ParseResult {
             else if (typeRaw.includes('integer')) type = 'integer';
             else if (typeRaw.includes('short')) type = 'short';
 
-            const marks = qMatch[6] ? parseInt(qMatch[6]) : 1;
+            const marksRaw = qMatch[6] ? parseInt(qMatch[6]) : NaN;
+            const marks = !isNaN(marksRaw) ? marksRaw : 1;
 
             currentQuestion = {
                 section: currentSection,
@@ -265,10 +286,21 @@ function parseLegacyFormat(text: string): ParseResult {
                 marks,
                 correctAnswer: null,
             };
+            stemContinuation = true;
             continue;
         }
 
         if (!currentQuestion) continue;
+
+        // Accumulate multi-line stem lines
+        if (stemContinuation) {
+            // If the line looks like an option, answer, explanation, or image, stop stem accumulation
+            if (!optionRegex.test(line) && !answerRegex.test(line) && !explanationRegex.test(line) && !imageRegex.test(line)) {
+                currentQuestion.stem = (currentQuestion.stem ?? '') + '\n' + line;
+                continue;
+            }
+            stemContinuation = false;
+        }
 
         const optMatch = line.match(optionRegex);
         if (optMatch && (currentQuestion.type === 'mcq' || currentQuestion.type === 'multi-mcq')) {
@@ -287,7 +319,13 @@ function parseLegacyFormat(text: string): ParseResult {
             } else if (currentQuestion.type === 'multi-mcq') {
                 currentQuestion.correctAnswer = ans.split(',').map(a => a.trim().toLowerCase());
             } else if (currentQuestion.type === 'integer') {
-                currentQuestion.correctAnswer = parseInt(ans);
+                const parsed = parseInt(ans);
+                if (isNaN(parsed)) {
+                    errors.push(`Q: "${currentQuestion.stem?.slice(0, 40)}…" — invalid integer answer: "${ans}"`);
+                    currentQuestion.correctAnswer = null;
+                } else {
+                    currentQuestion.correctAnswer = parsed;
+                }
             } else {
                 currentQuestion.correctAnswer = ans;
             }
@@ -319,8 +357,14 @@ function parseLegacyFormat(text: string): ParseResult {
 }
 
 function validateQuestion(q: Partial<ParsedQuestion>): boolean {
-    if (!q.stem || !q.correctAnswer) return false;
-    if ((q.type === 'mcq' || q.type === 'multi-mcq') && (!q.options || q.options.length === 0)) return false;
+    if (!q.stem?.trim()) return false;
+
+    const ans = q.correctAnswer;
+    if (ans === null || ans === undefined || ans === '') return false;
+    if (typeof ans === 'number' && isNaN(ans)) return false;
+    if (Array.isArray(ans) && ans.length === 0) return false;
+
+    if ((q.type === 'mcq' || q.type === 'multi-mcq') && (!q.options || q.options.length < 2)) return false;
     return true;
 }
 
