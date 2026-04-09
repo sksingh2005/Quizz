@@ -36,7 +36,6 @@ export interface IQuestion extends Document {
   explanation?: string; // Markdown
   images: { url: string; publicId: string }[]; // Cloudinary uploaded images
   needsManualReview: boolean;
-  timeLimit?: number; // Time limit in seconds for this specific question
   createdAt: Date;
 }
 
@@ -159,7 +158,6 @@ const QuestionSchema = new Schema<IQuestion>({
     publicId: { type: String, required: true },
   }],
   needsManualReview: { type: Boolean, default: false },
-  timeLimit: { type: Number, default: 60 }, // Default 60 seconds per question
   createdAt: { type: Date, default: Date.now },
 });
 

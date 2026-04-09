@@ -42,7 +42,7 @@ export default function TestPlayerPage({ params }: { params: Promise<{ id: strin
     } = useTestStore();
 
     // ── Local UI state (timer + face warning — truly local) ────────
-    const [questionTimeLeft, setQuestionTimeLeft] = useState<number | null>(null);
+    const [testTimeLeft, setTestTimeLeft] = useState<number | null>(null);
     const [saving, setSaving] = useState(false);
     const [faceWarningType, setFaceWarningType] = useState<ViolationType | null>(null);
     const lastFaceViolationRef = useRef<number>(0);
@@ -111,9 +111,7 @@ export default function TestPlayerPage({ params }: { params: Promise<{ id: strin
         });
         initAnswers(initialAnswers);
 
-        if (data.questions?.length > 0) {
-            setQuestionTimeLeft(data.questions[0].timeLimit || 60);
-        }
+        // No longer using per-question initialisation
 
         // Check for a live session
         const testId = data.attempt?.testId;
@@ -179,25 +177,24 @@ export default function TestPlayerPage({ params }: { params: Promise<{ id: strin
         }
     }, [data, isSubmitting]);
 
-    // Per-question countdown timer
+    // Global test countdown timer
     useEffect(() => {
-        if (!data || isSubmitting) return;
-        const timer = setInterval(() => {
-            setQuestionTimeLeft((prev) => {
-                if (prev === null) return null;
-                if (prev <= 1) { handleQuestionTimeout(); return 0; }
-                return prev - 1;
-            });
-        }, 1000);
+        if (!data?.attempt?.expiresAt || isSubmitting || isLiveSession) return;
+        const target = new Date(data.attempt.expiresAt).getTime();
+        
+        const updateTimer = () => {
+            const now = Date.now();
+            const left = Math.max(0, Math.floor((target - now) / 1000));
+            setTestTimeLeft(left);
+            if (left === 0) {
+                handleSubmit();
+            }
+        };
+        
+        updateTimer();
+        const timer = setInterval(updateTimer, 1000);
         return () => clearInterval(timer);
-    }, [data, isSubmitting, currentQIndex]);
-
-    // Reset timer on question change
-    useEffect(() => {
-        if (data?.questions?.[currentQIndex]) {
-            setQuestionTimeLeft(data.questions[currentQIndex].timeLimit || 60);
-        }
-    }, [currentQIndex, data]);
+    }, [data, isSubmitting, isLiveSession, handleSubmit]);
 
     // WebSocket sync
     const { syncState } = useTestSocket(liveTestId || '');
@@ -222,14 +219,7 @@ export default function TestPlayerPage({ params }: { params: Promise<{ id: strin
         } catch { /* ignore */ }
     };
 
-    const handleQuestionTimeout = useCallback(() => {
-        if (!data) return;
-        if (currentQIndex < data.questions.length - 1) {
-            setCurrentQIndex(currentQIndex + 1);
-        } else {
-            handleSubmit();
-        }
-    }, [currentQIndex, data, handleSubmit]);
+    // Question timeout removed in favor of global test timeout
 
     // Debounced saves for text inputs
     const debounceRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -356,12 +346,14 @@ export default function TestPlayerPage({ params }: { params: Promise<{ id: strin
                         )}
                     </div>
 
-                    <div className={`flex items-center gap-2 font-mono text-xl ${questionTimeLeft && questionTimeLeft < 10 ? 'text-red-500' : ''}`}>
-                        <Clock className="h-5 w-5" />
-                        {questionTimeLeft !== null
-                            ? `${Math.floor(questionTimeLeft / 60)}:${(questionTimeLeft % 60).toString().padStart(2, '0')}`
-                            : '--:--'}
-                    </div>
+                    {!isLiveSession && (
+                        <div className={`flex items-center gap-2 font-mono text-xl ${testTimeLeft && testTimeLeft < 60 ? 'text-red-500' : ''}`}>
+                            <Clock className="h-5 w-5" />
+                            {testTimeLeft !== null
+                                ? `${Math.floor(testTimeLeft / 60)}:${(testTimeLeft % 60).toString().padStart(2, '0')}`
+                                : '--:--'}
+                        </div>
+                    )}
 
                     <Button variant="destructive" onClick={handleSubmit} disabled={isSubmitting}>
                         {isSubmitting ? 'Submitting...' : 'Submit Test'}
