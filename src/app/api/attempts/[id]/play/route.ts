@@ -16,7 +16,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         const test = await Test.findById(attempt.testId).lean();
         const questions = await Question.find({ testId: attempt.testId }).lean();
 
-        // Sanitize questions (remove correct answers and explanations)
         const sanitizedQuestions = questions.map((q: any) => ({
             _id: q._id,
             section: q.section, // Assuming section is stored or derived
@@ -24,7 +23,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
             stem: q.stem,
             options: q.options,
             marks: q.marks,
-            timeLimit: q.timeLimit || 60, // Default to 60s if not set
             // correct answer and explanation removed
         }));
 
