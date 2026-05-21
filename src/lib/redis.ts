@@ -39,7 +39,7 @@ export interface ViolationData {
     }[];
 }
 
-const MAX_VIOLATIONS = 5;
+const MAX_VIOLATIONS = parseInt(process.env.NEXT_PUBLIC_MAX_WARNINGS || '15', 10);
 
 /**
  * Check whether Redis is connected and available

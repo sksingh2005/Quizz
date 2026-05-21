@@ -1,317 +1,380 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useState, use } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Loader2, Bot, ChevronDown, ChevronUp, CheckCircle, XCircle, AlertCircle, FileText, ArrowLeft } from 'lucide-react';
-
+import { Loader2, Bot, ChevronDown, ChevronUp, CheckCircle, XCircle, AlertCircle, FileText, ArrowLeft, ChevronLeft, ChevronRight, MinusCircle } from 'lucide-react';
+import { MarkdownRenderer } from '@/components/ui/markdown-renderer';
+import { useAttemptResult } from '@/hooks/queries/useAttemptResult';
+import { useAskAI } from '@/hooks/mutations/useAskAI';
 
 export default function ResultPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
-    const [data, setData] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
+
+    // Pure UI state — question navigation and AI panel state
+    const [currentIndex, setCurrentIndex] = useState(0);
     const [aiExplanations, setAiExplanations] = useState<Record<number, string>>({});
-    const [aiLoading, setAiLoading] = useState<Record<number, boolean>>({});
     const [aiOpen, setAiOpen] = useState<Record<number, boolean>>({});
 
-    useEffect(() => {
-        let cancelled = false;
-        let timer: ReturnType<typeof setTimeout>;
+    const { data, isLoading } = useAttemptResult(id);
+    const askAI = useAskAI();
 
-        const fetchResult = async () => {
-            try {
-                const res = await fetch(`/api/attempts/${id}/result`);
-                const json = await res.json();
-
-                if (cancelled) return;
-
-                // 202 = still grading — retry in 2 s
-                if (res.status === 202) {
-                    setData({ grading: true, message: json.message });
-                    timer = setTimeout(fetchResult, 2000);
-                    return;
-                }
-
-                setData(json);
-                setLoading(false);
-            } catch (err) {
-                console.error('Failed to fetch results', err);
-                if (!cancelled) setLoading(false);
-            }
-        };
-
-        fetchResult();
-        return () => { cancelled = true; clearTimeout(timer); };
-    }, [id]);
-
-    // Function to convert LaTeX notation and markdown to readable format
     const parseLatex = (text: string) => {
         if (!text) return '';
-
         let parsed = text;
-
-        // Replace **bold** with <strong> (only complete pairs)
         parsed = parsed.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-
-        // Replace inline math $...$ with HTML (only complete pairs)
         parsed = parsed.replace(/\$([^\$]+)\$/g, (match, formula) => {
             try {
-                let processedFormula = formula;
-
-                // Handle subscripts: _{...} or _x
-                processedFormula = processedFormula.replace(/_\{([^}]+)\}/g, '<sub>$1</sub>');
-                processedFormula = processedFormula.replace(/_([a-zA-Z0-9])/g, '<sub>$1</sub>');
-
-                // Handle superscripts: ^{...} or ^x
-                processedFormula = processedFormula.replace(/\^\{([^}]+)\}/g, '<sup>$1</sup>');
-                processedFormula = processedFormula.replace(/\^([a-zA-Z0-9])/g, '<sup>$1</sup>');
-
-                // Handle fractions
-                processedFormula = processedFormula.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1/$2)');
-
-                // Handle common Greek letters
-                processedFormula = processedFormula.replace(/\\omega/g, 'ω');
-                processedFormula = processedFormula.replace(/\\theta/g, 'θ');
-                processedFormula = processedFormula.replace(/\\phi/g, 'φ');
-                processedFormula = processedFormula.replace(/\\pi/g, 'π');
-
-                return processedFormula;
-            } catch (e) {
-                return match;
-            }
+                let p = formula;
+                p = p.replace(/_{([^}]+)}/g, '<sub>$1</sub>');
+                p = p.replace(/_([a-zA-Z0-9])/g, '<sub>$1</sub>');
+                p = p.replace(/\^{([^}]+)}/g, '<sup>$1</sup>');
+                p = p.replace(/\^([a-zA-Z0-9])/g, '<sup>$1</sup>');
+                p = p.replace(/\\frac{([^}]+)}{([^}]+)}/g, '($1/$2)');
+                p = p.replace(/\\omega/g, 'ω');
+                p = p.replace(/\\theta/g, 'θ');
+                p = p.replace(/\\phi/g, 'φ');
+                p = p.replace(/\\pi/g, 'π');
+                return p;
+            } catch { return match; }
         });
-
-        // Replace display math $$...$$ with centered HTML
         parsed = parsed.replace(/\$\$([^\$]+)\$\$/g, (match, formula) => {
             try {
-                let processedFormula = formula;
-                processedFormula = processedFormula.replace(/_\{([^}]+)\}/g, '<sub>$1</sub>');
-                processedFormula = processedFormula.replace(/_([a-zA-Z0-9])/g, '<sub>$1</sub>');
-                processedFormula = processedFormula.replace(/\^\{([^}]+)\}/g, '<sup>$1</sup>');
-                processedFormula = processedFormula.replace(/\^([a-zA-Z0-9])/g, '<sup>$1</sup>');
-                return `<div class="text-center my-2 font-semibold">${processedFormula}</div>`;
-            } catch (e) {
-                return match;
-            }
+                let p = formula;
+                p = p.replace(/_{([^}]+)}/g, '<sub>$1</sub>');
+                p = p.replace(/_([a-zA-Z0-9])/g, '<sub>$1</sub>');
+                p = p.replace(/\^{([^}]+)}/g, '<sup>$1</sup>');
+                p = p.replace(/\^([a-zA-Z0-9])/g, '<sup>$1</sup>');
+                return `<div class="text-center my-2 font-semibold">${p}</div>`;
+            } catch { return match; }
         });
-
-        // Replace newlines with <br>
         parsed = parsed.replace(/\n/g, '<br>');
-
         return parsed;
     };
 
     const handleAskAI = async (questionIndex: number, question: any) => {
-        setAiLoading(prev => ({ ...prev, [questionIndex]: true }));
-        setAiOpen(prev => ({ ...prev, [questionIndex]: true }));
-
-        try {
-            const response = await fetch('/api/ai/explain', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    question: question.stem,
-                    correctAnswer: question.correctAnswer,
-                    explanation: question.explanation
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to get AI explanation');
+        setAiOpen((prev) => ({ ...prev, [questionIndex]: true }));
+        askAI.mutate(
+            { question: question.stem, correctAnswer: question.correctAnswer, explanation: question.explanation },
+            {
+                onSuccess: (result) => {
+                    setAiExplanations((prev) => ({
+                        ...prev,
+                        [questionIndex]: parseLatex(result.explanation || 'Unable to generate explanation'),
+                    }));
+                },
+                onError: () => {
+                    setAiExplanations((prev) => ({
+                        ...prev,
+                        [questionIndex]: 'Failed to get AI explanation. Please try again.',
+                    }));
+                },
             }
-
-            const result = await response.json();
-            const parsedExplanation = parseLatex(result.explanation || 'Unable to generate explanation');
-            setAiExplanations(prev => ({ ...prev, [questionIndex]: parsedExplanation }));
-            setAiLoading(prev => ({ ...prev, [questionIndex]: false }));
-        } catch (error) {
-            console.error('AI explanation error:', error);
-            setAiExplanations(prev => ({ ...prev, [questionIndex]: 'Failed to get AI explanation. Please try again.' }));
-            setAiLoading(prev => ({ ...prev, [questionIndex]: false }));
-        }
+        );
     };
 
-    if (loading) return <div className="flex justify-center flex-col items-center h-[50vh] gap-4">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-muted-foreground animate-pulse">Retrieving examination report...</p>
-    </div>;
+    // ── Loading / grading states ───────────────────────────────────
+    if (isLoading) {
+        return (
+            <div className="flex justify-center flex-col items-center h-[50vh] gap-4">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-muted-foreground animate-pulse">Retrieving examination report...</p>
+            </div>
+        );
+    }
 
-    if (data?.grading) return (
-        <div className="flex flex-col items-center justify-center p-20 gap-4 min-h-[50vh]">
-            <Loader2 className="h-10 w-10 animate-spin text-primary" />
-            <h2 className="text-xl font-semibold">Grading in Progress</h2>
-            <p className="text-muted-foreground text-center max-w-md">
-                Your submission has been received. {data.message || 'Calculating your score...'}
-            </p>
-        </div>
-    );
+    if (data?._httpStatus === 202 || data?.grading) {
+        return (
+            <div className="flex flex-col items-center justify-center p-20 gap-4 min-h-[50vh]">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                <h2 className="text-xl font-semibold">Grading in Progress</h2>
+                <p className="text-muted-foreground text-center max-w-md">
+                    Your submission has been received. {data.message || 'Calculating your score...'}
+                </p>
+            </div>
+        );
+    }
 
-    if (!data || data.message) return (
-        <div className="flex flex-col items-center justify-center p-20 gap-4 min-h-[50vh]">
-            <AlertCircle className="h-12 w-12 text-muted-foreground" />
-            <p className="text-lg font-medium">{data?.message || 'Report not available.'}</p>
-            <Link href="/dashboard"><Button variant="outline">Return to Dashboard</Button></Link>
-        </div>
-    );
+    if (!data || data.message) {
+        return (
+            <div className="flex flex-col items-center justify-center p-20 gap-4 min-h-[50vh]">
+                <AlertCircle className="h-12 w-12 text-muted-foreground" />
+                <p className="text-lg font-medium">{data?.message || 'Report not available.'}</p>
+                <Link href="/dashboard"><Button variant="outline">Return to Dashboard</Button></Link>
+            </div>
+        );
+    }
 
-    const percentage = Math.round((data.score / data.totalMarks) * 100);
-    const totalQuestions = data.results.length;
-    const correctCount = data.results.filter((r: any) => r.isCorrect).length;
-    const incorrectCount = totalQuestions - correctCount;
+    // ── Derived values ─────────────────────────────────────────────
+    const percentage = Math.round((data.score! / data.totalMarks!) * 100);
+    const totalQuestions = data.results!.length;
+    const correctCount = data.results!.filter((r: any) => r.isCorrect).length;
+    const incorrectCount = data.results!.filter((r: any) => r.isAttempted && !r.isCorrect).length;
+    const unattemptedCount = totalQuestions - correctCount - incorrectCount;
+    const currentItem = data.results![currentIndex];
+
+    const goTo = (idx: number) => {
+        if (idx >= 0 && idx < totalQuestions) setCurrentIndex(idx);
+    };
 
     return (
-        <div className="container mx-auto p-6 space-y-8">
-            <Link href="/dashboard">
-                <Button variant="ghost" className="mb-4 pl-0 hover:pl-2 transition-all">
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Back to Dashboard
-                </Button>
-            </Link>
+        <div className="min-h-screen flex flex-col">
+            {/* Compact Header Bar */}
+            <div className="border-b bg-card sticky top-0 z-10">
+                <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+                    <Link href="/dashboard" className="text-muted-foreground hover:text-foreground flex items-center gap-1.5 text-sm">
+                        <ArrowLeft className="h-4 w-4" /> Dashboard
+                    </Link>
 
-            <Card className="bg-primary/5 border-primary/20">
-                <CardHeader>
-                    <CardTitle className="text-center text-3xl">Test Results</CardTitle>
-                </CardHeader>
-                <CardContent className="text-center">
-                    <div className="text-6xl font-bold text-primary mb-2">{data.score} <span className="text-2xl text-muted-foreground">/ {data.totalMarks}</span></div>
-                    <p className="text-muted-foreground">Total Score</p>
-                </CardContent>
-            </Card>
-
-            {/* Score Card */}
-            <div className="bg-card border rounded-lg shadow-sm overflow-hidden">
-                <div className="bg-muted/30 p-6 border-b">
-                    <h1 className="text-2xl font-bold tracking-tight">Examination Report</h1>
-                    <p className="text-muted-foreground">Performance Summary</p>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x border-b">
-                    <div className="p-6 text-center">
-                        <div className="text-sm text-muted-foreground uppercase tracking-wider font-medium mb-1">Score</div>
-                        <div className="text-3xl font-bold text-primary">{data.score} <span className="text-xl text-muted-foreground font-normal">/ {data.totalMarks}</span></div>
-                    </div>
-                    <div className="p-6 text-center">
-                        <div className="text-sm text-muted-foreground uppercase tracking-wider font-medium mb-1">Percentage</div>
-                        <div className={`text-3xl font-bold ${percentage >= 35 ? 'text-green-600' : 'text-red-500'}`}>{percentage}%</div>
-                    </div>
-                    <div className="p-6 text-center">
-                        <div className="text-sm text-muted-foreground uppercase tracking-wider font-medium mb-1">Questions</div>
-                        <div className="text-3xl font-bold">{totalQuestions}</div>
-                    </div>
-                    <div className="p-6 text-center">
-                        <div className="text-sm text-muted-foreground uppercase tracking-wider font-medium mb-1">Status</div>
-                        <Badge variant={percentage >= 35 ? "default" : "destructive"} className="text-base px-4 py-1 mt-1">
-                            {percentage >= 35 ? "PASSED" : "NEEDS IMPROVEMENT"}
+                    <div className="flex items-center gap-4 text-sm">
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-muted-foreground">Score:</span>
+                            <span className="font-bold text-primary">{data.score}/{data.totalMarks}</span>
+                        </div>
+                        <div className="hidden sm:flex items-center gap-1.5">
+                            <span className="text-muted-foreground">Percentage:</span>
+                            <span className={`font-bold ${percentage >= 35 ? 'text-green-600' : 'text-red-500'}`}>{percentage}%</span>
+                        </div>
+                        <div className="hidden md:flex items-center gap-3">
+                            <span className="flex items-center gap-1 text-green-600">
+                                <CheckCircle className="h-3.5 w-3.5" /> {correctCount}
+                            </span>
+                            <span className="flex items-center gap-1 text-red-500">
+                                <XCircle className="h-3.5 w-3.5" /> {incorrectCount}
+                            </span>
+                            <span className="flex items-center gap-1 text-gray-500">
+                                <MinusCircle className="h-3.5 w-3.5" /> {unattemptedCount}
+                            </span>
+                        </div>
+                        <Badge variant={percentage >= 35 ? 'default' : 'destructive'} className="text-xs">
+                            {percentage >= 35 ? 'PASSED' : 'NEEDS IMPROVEMENT'}
                         </Badge>
                     </div>
-                </div>
 
-                <div className="bg-muted/10 p-4 flex justify-center gap-8 text-sm">
-                    <div className="flex items-center gap-2">
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                        <span className="font-medium">{correctCount} Correct</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <XCircle className="h-4 w-4 text-red-500" />
-                        <span className="font-medium">{incorrectCount} Incorrect</span>
-                    </div>
+                    <Button variant="outline" size="sm" onClick={() => window.print()} className="gap-1.5 print:hidden text-xs">
+                        <FileText className="h-3.5 w-3.5" /> Print
+                    </Button>
                 </div>
             </div>
 
-            {/* Detailed Review */}
-            <div className="space-y-6">
-                <h2 className="text-xl font-bold border-b pb-2">Detailed Review</h2>
-                <div className="space-y-4">
-                    {data.results?.map((item: any, i: number) => (
-                        <div
+            <div className="flex-1 flex overflow-hidden">
+                {/* Left Sidebar — Question Navigator */}
+                <div className="w-[220px] border-r bg-muted/20 p-4 overflow-y-auto shrink-0 hidden md:block">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Questions</h3>
+                    <div className="grid grid-cols-5 gap-1.5">
+                        {data.results!.map((item: any, i: number) => (
+                            <button
+                                key={i}
+                                onClick={() => goTo(i)}
+                                className={`
+                                    w-full aspect-square rounded-md text-xs font-medium flex items-center justify-center
+                                    transition-all border cursor-pointer
+                                    ${i === currentIndex ? 'ring-2 ring-primary ring-offset-1 scale-110 z-10' : 'hover:scale-105'}
+                                    ${item.isCorrect
+                                        ? 'bg-green-100 border-green-300 text-green-800 dark:bg-green-950 dark:border-green-800 dark:text-green-300'
+                                        : item.isAttempted
+                                            ? 'bg-red-100 border-red-300 text-red-800 dark:bg-red-950 dark:border-red-800 dark:text-red-300'
+                                            : 'bg-gray-100 border-gray-300 text-gray-800 dark:bg-gray-900 dark:border-gray-800 dark:text-gray-400'
+                                    }
+                                `}
+                            >
+                                {i + 1}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="mt-4 pt-3 border-t space-y-1.5 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-sm bg-green-100 border border-green-300" />
+                            Correct ({correctCount})
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-sm bg-red-100 border border-red-300" />
+                            Incorrect ({incorrectCount})
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-sm bg-gray-100 border border-gray-300" />
+                            Unattempted ({unattemptedCount})
+                        </div>
+                    </div>
+                </div>
+
+                {/* Mobile Question Selector */}
+                <div className="md:hidden border-b bg-muted/20 p-2 overflow-x-auto flex gap-1.5 shrink-0">
+                    {data.results!.map((item: any, i: number) => (
+                        <button
                             key={i}
-                            className={`group bg-card border rounded-lg overflow-hidden transition-all hover:shadow-md ${item.isCorrect ? "border-l-4 border-l-green-500" : "border-l-4 border-l-red-500"
-                                }`}
+                            onClick={() => goTo(i)}
+                            className={`
+                                min-w-[32px] h-8 rounded-md text-xs font-medium flex items-center justify-center
+                                transition-all border cursor-pointer shrink-0
+                                ${i === currentIndex ? 'ring-2 ring-primary' : ''}
+                                ${item.isCorrect
+                                    ? 'bg-green-100 border-green-300 text-green-800'
+                                    : item.isAttempted
+                                        ? 'bg-red-100 border-red-300 text-red-800'
+                                        : 'bg-gray-100 border-gray-300 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
+                                }
+                            `}
                         >
-                            <div className="p-6">
-                                <div className="flex justify-between items-start gap-4 mb-4">
-                                    <div className="flex gap-3">
-                                        <span className="font-mono text-muted-foreground font-medium pt-1">Q{i + 1}.</span>
-                                        <div className="text-lg font-medium" dangerouslySetInnerHTML={{ __html: item.question.stem }} />
-                                    </div>
-                                    <Badge variant={item.isCorrect ? "outline" : "destructive"} className={item.isCorrect ? "border-green-500 text-green-600 bg-green-50" : ""}>
-                                        {item.isCorrect ? "Correct" : "Incorrect"}
-                                    </Badge>
-                                </div>
+                            {i + 1}
+                        </button>
+                    ))}
+                </div>
 
-                                <div className="grid md:grid-cols-2 gap-6 ml-8 md:ml-10 text-sm">
-                                    <div className="space-y-1">
-                                        <span className="text-muted-foreground font-medium text-xs uppercase tracking-wide">Your Answer</span>
-                                        <div className={`p-3 rounded border font-medium ${item.isCorrect ? 'bg-green-50/50 border-green-200 text-green-900' : 'bg-red-50/50 border-red-200 text-red-900'}`}>
-                                            {item.userAnswer !== null && item.userAnswer !== undefined ? JSON.stringify(item.userAnswer) : <span className="italic text-muted-foreground">Not Answered</span>}
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <span className="text-muted-foreground font-medium text-xs uppercase tracking-wide">Correct Answer</span>
-                                        <div className="p-3 rounded border bg-muted/30 font-medium">
-                                            {JSON.stringify(item.question.correctAnswer)}
-                                        </div>
-                                    </div>
-                                </div>
+                {/* Question Detail View */}
+                <div className="flex-1 overflow-y-auto">
+                    <div className="max-w-3xl mx-auto p-6">
+                        {/* Question Header and Navigation */}
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+                            <div className="flex items-center gap-3 w-full sm:w-auto">
+                                <span className="text-2xl font-bold text-muted-foreground">Q{currentIndex + 1}</span>
+                                <Badge
+                                    variant={currentItem.isCorrect ? 'outline' : currentItem.isAttempted ? 'destructive' : 'secondary'}
+                                    className={`text-sm px-3 py-1 ${currentItem.isCorrect ? 'border-green-500 text-green-600 bg-green-50' : !currentItem.isAttempted ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300' : ''}`}
+                                >
+                                    {currentItem.isCorrect ? '✓ Correct' : currentItem.isAttempted ? '✗ Incorrect' : '○ Unattempted'}
+                                </Badge>
+                            </div>
 
-                                {/* Explanation Section */}
-                                {(item.question.explanation || aiOpen[i]) && (
-                                    <div className="mt-6 ml-8 md:ml-10 pt-4 border-t space-y-4">
-                                        {item.question.explanation && (
-                                            <div>
-                                                <h4 className="text-xs font-bold text-muted-foreground uppercase mb-2">Explanation</h4>
-                                                <div className="text-sm text-foreground/90 leading-relaxed" dangerouslySetInnerHTML={{ __html: item.question.explanation }} />
-                                            </div>
-                                        )}
-
-                                        {/* AI Integration */}
-                                        {!aiExplanations[i] && !item.isCorrect && (
-                                            <div className="flex">
-                                                <Button
-                                                    variant="secondary"
-                                                    size="sm"
-                                                    className="gap-2 text-xs"
-                                                    onClick={() => handleAskAI(i, item.question)}
-                                                    disabled={aiLoading[i]}
-                                                >
-                                                    {aiLoading[i] ? (
-                                                        <><Loader2 className="h-3 w-3 animate-spin" /> Analyzing...</>
-                                                    ) : (
-                                                        <><Bot className="h-3 w-3" /> Explain why I'm wrong</>
-                                                    )}
-                                                </Button>
-                                            </div>
-                                        )}
-
-                                        {aiExplanations[i] && (
-                                            <Collapsible
-                                                open={aiOpen[i]}
-                                                onOpenChange={(open) => setAiOpen(prev => ({ ...prev, [i]: open }))}
-                                                className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900 rounded-md"
-                                            >
-                                                <CollapsibleTrigger asChild>
-                                                    <Button variant="ghost" size="sm" className="w-full flex justify-between items-center p-3 h-auto hover:bg-blue-100/50 dark:hover:bg-blue-900/40">
-                                                        <span className="flex items-center gap-2 text-blue-700 dark:text-blue-400 font-medium">
-                                                            <Bot className="h-4 w-4" /> AI Tutor Explanation
-                                                        </span>
-                                                        {aiOpen[i] ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                                                    </Button>
-                                                </CollapsibleTrigger>
-                                                <CollapsibleContent>
-                                                    <div className="p-4 pt-0 text-sm prose dark:prose-invert max-w-none">
-                                                        <div dangerouslySetInnerHTML={{ __html: aiExplanations[i] }} />
-                                                    </div>
-                                                </CollapsibleContent>
-                                            </Collapsible>
-                                        )}
-                                    </div>
-                                )}
+                            <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end bg-muted/30 border rounded-lg p-1.5 shadow-sm">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => goTo(currentIndex - 1)}
+                                    disabled={currentIndex === 0}
+                                    className="gap-1.5 text-muted-foreground hover:text-foreground hover:bg-background"
+                                >
+                                    <ChevronLeft className="h-4 w-4" /> <span className="hidden sm:inline">Previous</span>
+                                </Button>
+                                <span className="text-sm text-muted-foreground font-medium px-3">
+                                    {currentIndex + 1} / {totalQuestions}
+                                </span>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => goTo(currentIndex + 1)}
+                                    disabled={currentIndex === totalQuestions - 1}
+                                    className="gap-1.5 text-muted-foreground hover:text-foreground hover:bg-background"
+                                >
+                                    <span className="hidden sm:inline">Next</span> <ChevronRight className="h-4 w-4" />
+                                </Button>
                             </div>
                         </div>
-                    ))}
+
+                        {/* Question Stem */}
+                        <div className={`p-5 rounded-lg border-l-4 mb-6 bg-card border ${currentItem.isCorrect ? 'border-l-green-500' : currentItem.isAttempted ? 'border-l-red-500' : 'border-l-gray-400'}`}>
+                            <MarkdownRenderer content={currentItem.question.stem} className="text-base" />
+                        </div>
+
+                        {/* MCQ Options */}
+                        {currentItem.question.options && currentItem.question.options.length > 0 && (
+                            <div className="space-y-2 mb-6">
+                                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Options</h4>
+                                {currentItem.question.options.map((opt: any) => {
+                                    const isUserAnswer = currentItem.userAnswer === opt.id ||
+                                        (Array.isArray(currentItem.userAnswer) && currentItem.userAnswer.includes(opt.id));
+                                    const isCorrectAnswer = currentItem.question.correctAnswer === opt.id ||
+                                        (Array.isArray(currentItem.question.correctAnswer) && currentItem.question.correctAnswer.includes(opt.id));
+
+                                    let optStyle = 'border bg-card';
+                                    if (isCorrectAnswer) optStyle = 'border-green-400 bg-green-50/70 dark:bg-green-950/30';
+                                    if (isUserAnswer && !isCorrectAnswer) optStyle = 'border-red-400 bg-red-50/70 dark:bg-red-950/30';
+
+                                    return (
+                                        <div key={opt.id} className={`flex items-start gap-3 p-3 rounded-lg ${optStyle} transition-all`}>
+                                            <span className={`
+                                                font-bold text-sm w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5
+                                                ${isCorrectAnswer ? 'bg-green-500 text-white' : ''}
+                                                ${isUserAnswer && !isCorrectAnswer ? 'bg-red-500 text-white' : ''}
+                                                ${!isCorrectAnswer && !isUserAnswer ? 'bg-muted text-muted-foreground' : ''}
+                                            `}>
+                                                {opt.id.toUpperCase()}
+                                            </span>
+                                            <div className="flex-1 pt-0.5">
+                                                <MarkdownRenderer content={opt.text} />
+                                            </div>
+                                            {isCorrectAnswer && <CheckCircle className="h-5 w-5 text-green-600 shrink-0 mt-1" />}
+                                            {isUserAnswer && !isCorrectAnswer && <XCircle className="h-5 w-5 text-red-500 shrink-0 mt-1" />}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {/* Short / Integer Answer */}
+                        {(!currentItem.question.options || currentItem.question.options.length === 0) && (
+                            <div className="grid grid-cols-2 gap-4 mb-6">
+                                <div className="space-y-1">
+                                    <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Your Answer</span>
+                                    <div className={`p-3 rounded-lg border font-medium ${currentItem.isCorrect ? 'bg-green-50/50 border-green-200 text-green-900' : 'bg-red-50/50 border-red-200 text-red-900'}`}>
+                                        {currentItem.userAnswer !== null && currentItem.userAnswer !== undefined
+                                            ? String(currentItem.userAnswer)
+                                            : <span className="italic text-muted-foreground">Not Answered</span>}
+                                    </div>
+                                </div>
+                                <div className="space-y-1">
+                                    <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Correct Answer</span>
+                                    <div className="p-3 rounded-lg border bg-muted/30 font-medium">
+                                        {String(currentItem.question.correctAnswer)}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Explanation + AI */}
+                        {(currentItem.question.explanation || aiOpen[currentIndex]) && (
+                            <div className="pt-4 border-t space-y-4 mb-6">
+                                {currentItem.question.explanation && (
+                                    <div>
+                                        <h4 className="text-xs font-bold text-muted-foreground uppercase mb-2">Explanation</h4>
+                                        <MarkdownRenderer content={currentItem.question.explanation} className="text-sm text-foreground/90 leading-relaxed" />
+                                    </div>
+                                )}
+
+                                {!aiExplanations[currentIndex] && !currentItem.isCorrect && (
+                                    <div className="flex">
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            className="gap-2 text-xs"
+                                            onClick={() => handleAskAI(currentIndex, currentItem.question)}
+                                            disabled={askAI.isPending}
+                                        >
+                                            {askAI.isPending ? (
+                                                <><Loader2 className="h-3 w-3 animate-spin" /> Analyzing...</>
+                                            ) : (
+                                                <><Bot className="h-3 w-3" /> Explain why I&apos;m wrong</>
+                                            )}
+                                        </Button>
+                                    </div>
+                                )}
+
+                                {aiExplanations[currentIndex] && (
+                                    <Collapsible
+                                        open={aiOpen[currentIndex]}
+                                        onOpenChange={(open) => setAiOpen((prev) => ({ ...prev, [currentIndex]: open }))}
+                                        className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900 rounded-md"
+                                    >
+                                        <CollapsibleTrigger asChild>
+                                            <Button variant="ghost" size="sm" className="w-full flex justify-between items-center p-3 h-auto hover:bg-blue-100/50 dark:hover:bg-blue-900/40">
+                                                <span className="flex items-center gap-2 text-blue-700 dark:text-blue-400 font-medium">
+                                                    <Bot className="h-4 w-4" /> AI Tutor Explanation
+                                                </span>
+                                                {aiOpen[currentIndex] ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                            </Button>
+                                        </CollapsibleTrigger>
+                                        <CollapsibleContent>
+                                            <div className="p-4 pt-0 text-sm prose dark:prose-invert max-w-none">
+                                                <div dangerouslySetInnerHTML={{ __html: aiExplanations[currentIndex] }} />
+                                            </div>
+                                        </CollapsibleContent>
+                                    </Collapsible>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

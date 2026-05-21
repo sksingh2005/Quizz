@@ -15,15 +15,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         console.log(`File received: ${file.name}, size: ${file.size}, type: ${file.type}`);
 
         const fileName = file.name.toLowerCase();
-        let fileType: 'docx' | 'pdf' | 'txt';
+        let fileType: 'docx' | 'md' | 'txt';
 
         if (fileName.endsWith('.docx')) {
             fileType = 'docx';
+        } else if (fileName.endsWith('.md')) {
+            fileType = 'md';
         } else if (fileName.endsWith('.txt')) {
             fileType = 'txt';
         } else {
             return NextResponse.json({
-                error: 'Only DOCX and TXT files are supported. Please use one of these formats.'
+                error: 'Only DOCX, Markdown (.md), and TXT files are supported. Please use one of these formats.'
             }, { status: 400 });
         }
 
