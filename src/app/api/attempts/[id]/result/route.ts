@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import dbConnect from '@/lib/db/connect';
 import { Attempt, AttemptResult } from '@/lib/db/models';
 import { ensureAttemptResultSnapshot, gradeAttempt } from '@/lib/grading';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 
 const STUCK_GRADING_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -27,6 +27,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        const isAdmin = session.user.role === 'admin';
         const { id } = await params;
         const attemptId = id;
         let attempt = await Attempt.findById(attemptId).lean();
@@ -35,7 +36,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
             return NextResponse.json({ error: 'Attempt not found' }, { status: 404 });
         }
 
-        const isAdmin = session.user.role === 'admin';
         const isOwner = attempt.userId.toString() === session.user.id;
 
         if (!isAdmin && !isOwner) {
@@ -69,7 +69,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         }
 
         // Check visibility policy
-        if (!attempt.resultVisibilityAt || new Date() < new Date(attempt.resultVisibilityAt)) {
+        if (!isAdmin && (!attempt.resultVisibilityAt || new Date() < new Date(attempt.resultVisibilityAt))) {
             return NextResponse.json({
                 status: attempt.status,
                 message: 'Results are not yet visible'

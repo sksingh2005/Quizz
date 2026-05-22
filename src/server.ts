@@ -1,3 +1,7 @@
+import path from 'path';
+import dotenv from 'dotenv';
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+
 import { createServer } from 'http';
 import { parse } from 'url';
 import next from 'next';

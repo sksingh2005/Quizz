@@ -153,7 +153,7 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
             } else if (res.status === 202 && data.jobId) {
                 await pollParseJob(String(data.jobId));
             } else {
-                setErrors([data.error || 'Failed to parse file']);
+                setErrors([data.error || 'Failed to parse file', data.details].filter(Boolean));
             }
         } catch (err) {
             setErrors(['Upload failed']);
@@ -192,7 +192,7 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
             } else if (res.status === 202 && data.jobId) {
                 await pollParseJob(String(data.jobId));
             } else {
-                setErrors([data.error || 'Failed to extract questions from book PDF']);
+                setErrors([data.error || 'Failed to extract questions from book PDF', data.details].filter(Boolean));
             }
         } catch (err) {
             setErrors(['Book extraction failed']);
@@ -279,18 +279,17 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
 
         setSaving(true);
         try {
+            // const res = await fetch(`/api/tests/${id}/questions`, {
+            //     method: 'POST',
+            //     headers: { 'Content-Type': 'application/json' },
+            //     body: JSON.stringify({ questions: validatedQuestions }),
+            // });
             const res = await fetch(`/api/tests/${id}/questions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ questions: validatedQuestions }),
             });
-            // const res = await fetch(`/api/tests/${id}`, {
-            //     method: 'PUT',
-            //     headers: { 'Content-Type': 'application/json' },
-            //     body: JSON.stringify({
-            //         questions: validatedQuestions
-            //     }),
-            // });
+
 
 
             if (res.ok) {
@@ -401,7 +400,8 @@ export default function UploadPage({ params }: { params: Promise<{ id: string }>
                             <div className="flex items-center gap-4">
                                 <Input
                                     type="file"
-                                    accept=".docx,.md"
+
+                                    accept=".docx,.md,.txt"
                                     onChange={e => setFile(e.target.files?.[0] || null)}
                                 />
                                 <Button onClick={handleUpload} disabled={!file || loading}>
