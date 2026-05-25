@@ -12,6 +12,10 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
+        if (!email.endsWith('@nitj.ac.in')) {
+            return NextResponse.json({ error: 'Only @nitj.ac.in email addresses are allowed' }, { status: 400 });
+        }
+
         const existingUser = await User.findOne({ email });
         if (existingUser) {
             return NextResponse.json({ error: 'Email already in use' }, { status: 400 });

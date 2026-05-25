@@ -14,6 +14,7 @@ export const authOptions: NextAuthOptions = {
             },
             async authorize(credentials) {
                 if (!credentials?.email || !credentials?.password) return null;
+                if (!credentials.email.endsWith('@nitj.ac.in')) return null;
 
                 await dbConnect();
                 const user = await User.findOne({ email: credentials.email });

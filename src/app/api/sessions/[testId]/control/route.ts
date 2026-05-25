@@ -2,16 +2,30 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db/connect';
 import { TestSession, Question, Test } from '@/lib/db/models';
 import { getRedisPublisher } from '@/lib/redis';
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 export async function POST(req: Request, { params }: { params: Promise<{ testId: string }> }) {
     await dbConnect();
+    const authSession = await getServerSession(authOptions);
+
+    if (!authSession || authSession.user.role !== 'admin') {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     try {
         const { testId } = await params;
         const { action, index } = await req.json();
+
+        // Verify ownership
+        const test = await Test.findById(testId).lean();
+        if (!test || (test as any).createdBy?.toString() !== authSession.user.id) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
         // action: 'START' | 'NEXT' | 'PREV' | 'GOTO' | 'PAUSE' | 'FINISH'
 
-        const session = await TestSession.findOne({ testId });
-        if (!session) {
+        const testSession = await TestSession.findOne({ testId });
+        if (!testSession) {
             return NextResponse.json({ error: 'Session not found. Create one first.' }, { status: 404 });
         }
 
@@ -20,31 +34,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ testId:
 
         switch (action) {
             case 'START':
-                session.status = 'active';
-                session.startedAt = new Date();
-                session.currentQuestionIndex = 0;
+                testSession.status = 'active';
+                testSession.startedAt = new Date();
+                testSession.currentQuestionIndex = 0;
                 break;
             case 'NEXT':
-                if (session.currentQuestionIndex < totalQuestions - 1) {
-                    session.currentQuestionIndex += 1;
+                if (testSession.currentQuestionIndex < totalQuestions - 1) {
+                    testSession.currentQuestionIndex += 1;
                 }
                 break;
             case 'PREV':
-                session.currentQuestionIndex = Math.max(0, session.currentQuestionIndex - 1);
+                testSession.currentQuestionIndex = Math.max(0, testSession.currentQuestionIndex - 1);
                 break;
             case 'GOTO':
                 if (typeof index === 'number' && index >= 0 && index < totalQuestions) {
-                    session.currentQuestionIndex = index;
+                    testSession.currentQuestionIndex = index;
                 }
                 break;
             case 'PAUSE':
-                session.status = 'paused';
+                testSession.status = 'paused';
                 break;
             case 'RESUME':
-                session.status = 'active';
+                testSession.status = 'active';
                 break;
             case 'FINISH':
-                session.status = 'finished';
+                testSession.status = 'finished';
                 // Auto-draft the test so it's no longer joinable by new students
                 await Test.findByIdAndUpdate(testId, { status: 'draft' });
                 break;
@@ -52,22 +66,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ testId:
                 return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
         }
 
-        session.updatedAt = new Date();
-        await session.save();
+        testSession.updatedAt = new Date();
+        await testSession.save();
 
         // Publish event to Redis → Socket.io server picks it up and broadcasts
         const redisPub = getRedisPublisher();
         await redisPub.publish('test-control', JSON.stringify({
             testId,
-            currentQuestionIndex: session.currentQuestionIndex,
-            status: session.status,
+            currentQuestionIndex: testSession.currentQuestionIndex,
+            status: testSession.status,
         }));
 
         return NextResponse.json({
             success: true,
             session: {
-                status: session.status,
-                currentQuestionIndex: session.currentQuestionIndex,
+                status: testSession.status,
+                currentQuestionIndex: testSession.currentQuestionIndex,
             },
             totalQuestions,
         });

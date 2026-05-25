@@ -1,11 +1,26 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db/connect';
 import { Question, Test } from '@/lib/db/models';
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
     await dbConnect();
+    const session = await getServerSession(authOptions);
+
+    if (!session || session.user.role !== 'admin') {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     try {
         const { id } = await params;
+
+        // Verify ownership
+        const test = await Test.findById(id).lean();
+        if (!test || (test as any).createdBy?.toString() !== session.user.id) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const questions = await Question.find({ testId: id }).lean();
         return NextResponse.json(questions);
     } catch (error) {
@@ -16,10 +31,22 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
     await dbConnect();
+    const session = await getServerSession(authOptions);
+
+    if (!session || session.user.role !== 'admin') {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     try {
         const { questions } = await req.json();
         const { id } = await params;
         const testId = id;
+
+        // Verify ownership
+        const test = await Test.findById(testId).lean();
+        if (!test || (test as any).createdBy?.toString() !== session.user.id) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
 
         // Validate and clean questions before insert
         const questionsWithTestId = questions.map((q: any) => ({

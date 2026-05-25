@@ -36,9 +36,15 @@ export default function SignupPage() {
         if (status !== 'unauthenticated') return;
 
         fetch('/api/batches')
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error(`Failed to fetch batches: ${res.status}`);
+                return res.json();
+            })
             .then(setBatches)
-            .catch(console.error);
+            .catch(err => {
+                console.error('Batch fetch error:', err);
+                setBatches([]);
+            });
     }, [status]);
 
     if (status === 'loading') {
@@ -56,6 +62,12 @@ export default function SignupPage() {
         e.preventDefault();
         setLoading(true);
         setError('');
+
+        if (!formData.email.endsWith('@nitj.ac.in')) {
+            setError('Only @nitj.ac.in email addresses are allowed');
+            setLoading(false);
+            return;
+        }
 
         try {
             const res = await fetch('/api/auth/signup', {
@@ -99,10 +111,12 @@ export default function SignupPage() {
                             <Input
                                 id="email"
                                 type="email"
+                                placeholder="yourname@nitj.ac.in"
                                 value={formData.email}
                                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                                 required
                             />
+                            <p className="text-xs text-muted-foreground">Only @nitj.ac.in emails are allowed</p>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="password">Password</Label>

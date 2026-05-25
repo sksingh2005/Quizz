@@ -21,6 +21,9 @@ export async function GET() {
                 batches: { $in: session.user.batches },
                 status: 'published'
             };
+        } else {
+            // Each admin only sees tests they created
+            query = { createdBy: session.user.id };
         }
 
         const tests = await Test.find(query).sort({ createdAt: -1 }).lean();

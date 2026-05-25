@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import dbConnect from '@/lib/db/connect';
-import { Attempt, User, Batch } from '@/lib/db/models';
+import { Attempt, User, Batch, Test } from '@/lib/db/models';
 
 export async function GET(
     request: NextRequest,
@@ -16,6 +16,12 @@ export async function GET(
 
         const { id } = await params;
         await dbConnect();
+
+        // Verify this admin owns the test
+        const test = await Test.findById(id).lean();
+        if (!test || (test as any).createdBy?.toString() !== session.user.id) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
 
         // Ensure models are registered
         // (User and Batch are imported which triggers registration if not done, 
