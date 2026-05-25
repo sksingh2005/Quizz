@@ -41,6 +41,12 @@ export default function LoginPage() {
         setLoading(true);
         setError('');
 
+        if (!email.endsWith('@nitj.ac.in')) {
+            setError('Only @nitj.ac.in email addresses are allowed');
+            setLoading(false);
+            return;
+        }
+
         const res = await signIn('credentials', {
             email,
             password,
@@ -70,10 +76,12 @@ export default function LoginPage() {
                             <Input
                                 id="email"
                                 type="email"
+                                placeholder="yourname@nitj.ac.in"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
                             />
+                            <p className="text-xs text-muted-foreground">Only @nitj.ac.in emails are allowed</p>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="password">Password</Label>
