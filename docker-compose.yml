@@ -1,28 +1,36 @@
 services:
   # ── Quiz App ──────────────────────────────────────────────
   app:
-    image: sayshank/quizz:1.2
+    build: .
     ports:
       - "3000:3000"
     depends_on:
       - mongo
       - redis
     environment:
-      # Database – override in .env to use Atlas or external DB
-      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/quizzapp}
+      # Database – uses the Docker mongo service by default
+      # Override in .env to use Atlas or an external DB
+      MONGODB_URI: ${MONGODB_URI:-mongodb://admin:password@mongo:27017/quizzapp?authSource=admin}
       # Redis (for BullMQ + Socket.io pub/sub)
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-      # PDF Parse Worker Config
-      PDF_PARSE_QUEUE_ENABLED: "true"
-      PDF_PARSE_WORKER_CONCURRENCY: "2"
-      PDF_PARSE_WAIT_MS: "30000"
-      PDF_MAX_FILE_SIZE_MB: "20"
-      PDF_PARSE_MAX_CONCURRENT_PER_ADMIN: "3"
       # NextAuth.js – generate a real secret with: openssl rand -base64 32
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-changeme}
-      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
       # Google Gemini AI
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      # Cloudinary (for image uploads in questions)
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: ${NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+      # PDF Parse Worker Config
+      PDF_PARSE_QUEUE_ENABLED: ${PDF_PARSE_QUEUE_ENABLED:-true}
+      PDF_PARSE_WORKER_CONCURRENCY: ${PDF_PARSE_WORKER_CONCURRENCY:-2}
+      PDF_PARSE_WAIT_MS: ${PDF_PARSE_WAIT_MS:-30000}
+      PDF_MAX_FILE_SIZE_MB: ${PDF_MAX_FILE_SIZE_MB:-20}
+      PDF_PARSE_MAX_CONCURRENT_PER_ADMIN: ${PDF_PARSE_MAX_CONCURRENT_PER_ADMIN:-3}
+      # Anti-Cheat
+      NEXT_PUBLIC_MAX_WARNINGS: ${NEXT_PUBLIC_MAX_WARNINGS:-15}
       # Runtime
       NODE_ENV: production
       PORT: "3000"
@@ -33,6 +41,9 @@ services:
     image: mongo:7
     ports:
       - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
     volumes:
       - mongo-data:/data/db
     restart: unless-stopped
