@@ -110,6 +110,12 @@ export default function LoginPage() {
                                 Sign up
                             </Link>
                         </div>
+                        <div className="text-center text-sm text-muted-foreground">
+                            Are you an admin?{' '}
+                            <Link href="/admin-signup" className="text-primary hover:underline">
+                                Register as Admin
+                            </Link>
+                        </div>
                     </form>
                 </CardContent>
             </Card>

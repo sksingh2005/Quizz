@@ -85,6 +85,32 @@ Controls the background job queue that processes uploaded DOCX/PDF files.
 | --- | --- | --- |
 | `NEXT_PUBLIC_MAX_WARNINGS` | Number of tab-switch / focus-loss warnings before a student is auto-submitted. Exposed to the browser. | `15` |
 
+### Admin Access
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `ADMIN_EMAILS` | Comma-separated list of email addresses authorized to register as admin via the web UI. Only emails in this list can sign up through `/admin-signup`. | `admin@nitj.ac.in` |
+
+**Example:**
+```env
+ADMIN_EMAILS=professor1@nitj.ac.in,professor2@nitj.ac.in,hod@nitj.ac.in
+```
+
+#### How to create an Admin account
+
+Setting up an admin is a **two-step process**:
+
+1. **Step 1 (Developer):** Add the admin's email to `ADMIN_EMAILS` in your `.env` / `.env.local` file and restart the server.
+   ```env
+   ADMIN_EMAILS=prof1@nitj.ac.in,prof2@nitj.ac.in
+   ```
+
+2. **Step 2 (Admin):** The admin visits `/admin-signup` in the browser, fills in their name, email, and password, and submits the form. Their account is created in the database with the `admin` role.
+
+After signing up, the admin can log in at `/login` like any other user — they will be automatically redirected to the Admin Dashboard (`/admin`).
+
+> **Important:** The `ADMIN_EMAILS` whitelist only controls **who is allowed to register** as admin. It does NOT automatically create accounts — the admin must sign up themselves. If someone's email is not in the whitelist, the signup will be rejected.
+
 ---
 
 ## Setup (Local Development)
@@ -199,8 +225,12 @@ CLOUDINARY_API_SECRET=abcdef
 
 ## Usage
 
-- Access Admin UI at `/admin`.
-- Access User Dashboard at `/dashboard`.
+- **Landing Page** (`/`): Choose between Student Portal and Admin Portal.
+- **Student Sign Up** (`/signup`): Students register with name, email, password, roll number, and batch.
+- **Admin Sign Up** (`/admin-signup`): Admins register with name, email, and password. Only emails listed in `ADMIN_EMAILS` are authorized.
+- **Login** (`/login`): Shared login for both students and admins. After login, users are automatically redirected based on their role.
+- **Admin Dashboard** (`/admin`): Create tests, manage batches, grade submissions.
+- **Student Dashboard** (`/dashboard`): Take tests, view results, get AI feedback.
 - Upload format: Supported formats include DOCX and PDF. See the expected structure in the documentation or sample files.
 
 ## Tech Stack

@@ -63,12 +63,19 @@ export default function Home() {
               <p className="text-muted-foreground text-base leading-relaxed">
                 Manage test assignments, securely handle assessment materials, and monitor overarching student performance metrics.
               </p>
-              <Link href="/admin" className="block mt-auto w-full">
-                <Button variant="outline" className="w-full text-base h-11" size="lg">
-                  Admin Login
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </Link>
+              <div className="flex flex-col gap-3 mt-auto">
+                <Link href="/login" className="block w-full">
+                  <Button variant="outline" className="w-full text-base h-11" size="lg">
+                    Admin Login
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </Link>
+                <Link href="/admin-signup" className="block w-full">
+                  <Button variant="ghost" className="w-full text-sm h-9 text-muted-foreground hover:text-foreground">
+                    Register as Admin
+                  </Button>
+                </Link>
+              </div>
             </CardContent>
           </Card>
 

@@ -7,22 +7,18 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ShieldCheck } from 'lucide-react';
 
-export default function SignupPage() {
+export default function AdminSignupPage() {
     const router = useRouter();
     const { data: session, status } = useSession();
     const [formData, setFormData] = useState({
         name: '',
         email: '',
         password: '',
-        batchId: '',
-        rollNumber: '',
     });
-    const [batches, setBatches] = useState<any[]>([]);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -31,21 +27,6 @@ export default function SignupPage() {
             router.replace(session?.user?.role === 'admin' ? '/admin' : '/dashboard');
         }
     }, [status, session, router]);
-
-    useEffect(() => {
-        if (status !== 'unauthenticated') return;
-
-        fetch('/api/batches')
-            .then(res => {
-                if (!res.ok) throw new Error(`Failed to fetch batches: ${res.status}`);
-                return res.json();
-            })
-            .then(setBatches)
-            .catch(err => {
-                console.error('Batch fetch error:', err);
-                setBatches([]);
-            });
-    }, [status]);
 
     if (status === 'loading') {
         return <div className="flex justify-center flex-col items-center h-[50vh] gap-4">
@@ -70,7 +51,7 @@ export default function SignupPage() {
         }
 
         try {
-            const res = await fetch('/api/auth/signup', {
+            const res = await fetch('/api/auth/admin-signup', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData),
@@ -93,70 +74,46 @@ export default function SignupPage() {
         <div className="min-h-screen flex items-center justify-center bg-background p-4">
             <Card className="w-full max-w-md">
                 <CardHeader>
-                    <CardTitle className="text-2xl text-center">Sign Up</CardTitle>
+                    <CardTitle className="text-2xl text-center flex items-center justify-center gap-2">
+                        <ShieldCheck className="h-6 w-6 text-primary" />
+                        Admin Sign Up
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground text-center mt-2">
+                        Only authorized email addresses can register as admin.
+                    </p>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="space-y-2">
-                            <Label htmlFor="name">Full Name</Label>
+                            <Label htmlFor="admin-name">Full Name</Label>
                             <Input
-                                id="name"
+                                id="admin-name"
                                 value={formData.name}
                                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                 required
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="email">Email</Label>
+                            <Label htmlFor="admin-email">Email</Label>
                             <Input
-                                id="email"
+                                id="admin-email"
                                 type="email"
                                 placeholder="yourname@nitj.ac.in"
                                 value={formData.email}
                                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                                 required
                             />
-                            <p className="text-xs text-muted-foreground">Only @nitj.ac.in emails are allowed</p>
+                            <p className="text-xs text-muted-foreground">Only whitelisted @nitj.ac.in emails are allowed</p>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="password">Password</Label>
+                            <Label htmlFor="admin-password">Password</Label>
                             <Input
-                                id="password"
+                                id="admin-password"
                                 type="password"
                                 value={formData.password}
                                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                                 required
                             />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="rollNumber">Roll Number</Label>
-                            <Input
-                                id="rollNumber"
-                                type="number"
-                                value={formData.rollNumber}
-                                onChange={(e) => setFormData({ ...formData, rollNumber: e.target.value })}
-                                required
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="batch">Select Batch</Label>
-                            <Select
-                                onValueChange={(val) => setFormData({ ...formData, batchId: val })}
-                                required
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select your batch" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {batches.map((batch) => (
-                                        <SelectItem key={batch._id} value={batch._id}>
-                                            {batch.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
                         </div>
 
                         {error && (
@@ -166,19 +123,19 @@ export default function SignupPage() {
                         )}
 
                         <Button type="submit" className="w-full" disabled={loading}>
-                            {loading ? 'Creating Account...' : 'Sign Up'}
+                            {loading ? 'Creating Admin Account...' : 'Sign Up as Admin'}
                         </Button>
 
                         <div className="text-center text-sm text-muted-foreground">
-                            Already have an account?{' '}
+                            Already have an admin account?{' '}
                             <Link href="/login" className="text-primary hover:underline">
                                 Login
                             </Link>
                         </div>
                         <div className="text-center text-sm text-muted-foreground">
-                            Are you an admin?{' '}
-                            <Link href="/admin-signup" className="text-primary hover:underline">
-                                Register as Admin
+                            Not an admin?{' '}
+                            <Link href="/signup" className="text-primary hover:underline">
+                                Student Sign Up
                             </Link>
                         </div>
                     </form>
